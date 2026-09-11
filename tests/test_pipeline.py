@@ -50,7 +50,7 @@ def test_static_assets_exist():
             for name, value in attrs:
                 if name in ('src','href') and value.startswith('/') and value != '/':
                     assert (root / value.lstrip('/')).is_file(), value
-    Assets().feed((root/'index.html').read_text())
+    Assets().feed((root/'index.html').read_text(encoding='utf-8'))
 
 def test_invalid_audio_job_reports_failure():
     client = TestClient(app)
