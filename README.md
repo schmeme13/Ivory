@@ -1,5 +1,11 @@
 # Ivory
 
+## Score-focused interface
+
+The sidebar now separates uploading from sheet settings. Explanations live behind accessible info buttons; advanced hand separation is collapsed. Change a sheet setting, then use **Update sheet music**. **Download** groups printable PDF, editable MusicXML, performance MIDI, and raw JSON with plain-language descriptions.
+
+The compact score transport supports playback, a progress slider, clicking the sheet, and dragging the blue marker. Arrow keys move the focused marker by a beat; Home/End seek to the ends. **Compare** plays the detected performance; the original upload stays beside the file picker. Cursor timing uses OSMD musical timestamps at the exported score tempo. The cursor logic has three automated tests (`node tests/score-transport.test.cjs`); rendered browser interaction has not been visually tested.
+
 ## Expressive rhythm interpretation
 
 The default Expressive mode clusters different pitches struck within a bounded window (up to 90 ms), then favors sixteenth-note rhythms and fills tiny release gaps. Clustering happens across both staves; repeated attacks of the same pitch are kept separate. Simple favors eighth notes with a slightly wider chord window. Precise retains a thirty-second grid and distinct staggered attacks. These choices can simplify intentional ornaments; use Precise for those passages. Raw performance MIDI and detected-performance playback remain unchanged.
