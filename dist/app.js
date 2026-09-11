@@ -5,11 +5,12 @@ async function request(url, options) {
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(typeof data.detail === 'string' ? data.detail : 'The request failed. Please try again.'); }
   return response.json();
 }
-function options() { return {bpm: el('bpm').value ? Number(el('bpm').value) : null, meter: el('meter').value, split: el('split').value ? Number(el('split').value) : null}; }
+function options() { return {bpm: el('bpm').value ? Number(el('bpm').value) : null, meter: el('meter').value, split: el('split').value ? Number(el('split').value) : null, feel:el('feel').value}; }
 async function show(job) {
   jobId = job.id;
   el('bpm').value = job.details.bpm;
   el('meter').value = job.details.meter;
+  el('feel').value = job.details.feel || 'expressive';
   el('split').placeholder = `Automatic: ${job.details.staff_split ?? 60}`;
   for (const [id,file] of [['detected-player','performance.wav'],['score-player','score.wav']]) {
     el(id).pause(); el(id).src = `/api/jobs/${job.id}/files/${file}?v=${Date.now()}`;
@@ -27,7 +28,7 @@ el('upload').addEventListener('submit', async event => {
   event.preventDefault(); el('submit').disabled = true; el('results').hidden = true; el('print').hidden = true; el('empty').hidden = false;
   try {
     const file = el('audio').files[0]; if(file.size > 40*1024*1024) throw new Error('Choose a file smaller than 40 MB.');
-    const data = new FormData(); data.append('file',file); data.append('signature',options().meter); if(options().bpm) data.append('bpm',options().bpm); if(options().split) data.append('split',options().split);
+    const data = new FormData(); data.append('file',file); data.append('signature',options().meter); data.append('feel',options().feel); if(options().bpm) data.append('bpm',options().bpm); if(options().split) data.append('split',options().split);
     el('status').textContent = 'Uploading your recording…'; let job = await request('/api/jobs',{method:'POST',body:data}); jobId=job.id;
     while (!['done','error'].includes(job.status)) { el('status').textContent=job.message; await new Promise(resolve => setTimeout(resolve,1500)); job=await request(`/api/jobs/${jobId}`); }
     el('status').textContent=job.message; if(job.status==='done') await show(job);

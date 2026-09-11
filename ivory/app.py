@@ -18,7 +18,7 @@ from .notation import make_score
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'data/jobs'
 DATA.mkdir(parents=True, exist_ok=True)
-app = FastAPI(title='Ivory', version='0.1.0')
+app = FastAPI(title='Ivory', version='0.2.0')
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'testserver'])
 
 @app.middleware('http')
@@ -36,6 +36,7 @@ class ScoreOptions(BaseModel):
     bpm: float | None = Field(default=None, ge=20, le=300)
     meter: Literal['4/4', '3/4', '2/4', '6/8'] = '4/4'
     split: int | None = Field(default=None, ge=21, le=108)
+    feel: Literal['expressive', 'simple', 'precise'] = 'expressive'
 
 def get_job(job_id):
     with lock:
@@ -56,7 +57,7 @@ def process(job_id, options):
         if not events['notes']:
             raise ValueError('No piano notes were detected. Try a clearer solo-piano recording.')
         update(job_id, status='engraving', message='Preparing the score…')
-        details = make_score(events, folder, options.bpm, options.meter, options.split)
+        details = make_score(events, folder, options.bpm, options.meter, options.split, options.feel)
         update(job_id, status='done', message='Your first-pass score is ready.', details=details, note_count=len(events['notes']), pedal_count=len(events['pedals']), duration=events['duration'])
     except Exception as exc:
         logging.exception('Transcription failed')
@@ -73,9 +74,9 @@ def latest():
     return completed[-1] if completed else None
 
 @app.post('/api/jobs', status_code=202)
-async def upload(file: UploadFile = File(...), bpm: float | None = Form(None), signature: str = Form('4/4'), split: int | None = Form(None)):
+async def upload(file: UploadFile = File(...), bpm: float | None = Form(None), signature: str = Form('4/4'), split: int | None = Form(None), feel: str = Form('expressive')):
     try:
-        options = ScoreOptions(bpm=bpm, meter=signature, split=split)
+        options = ScoreOptions(bpm=bpm, meter=signature, split=split, feel=feel)
     except ValueError:
         raise HTTPException(422, 'Use tempo 20–300 and a supported meter.')
     with lock:
@@ -115,7 +116,7 @@ def rescore(job_id: str, options: ScoreOptions):
         raise HTTPException(409, 'Wait for transcription to finish.')
     folder = DATA / job_id
     with lock:
-        details = make_score(json.loads((folder / 'events.json').read_text()), folder, options.bpm, options.meter, options.split)
+        details = make_score(json.loads((folder / 'events.json').read_text()), folder, options.bpm, options.meter, options.split, options.feel)
         jobs[job_id]['details'] = details
     return get_job(job_id)
 

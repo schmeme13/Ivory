@@ -1,5 +1,11 @@
 # First-iteration verification
 
+## Update 0.2
+
+Eight tests pass, including generated A4 audio at 440 Hz, silence before onset, pedal/repeated-note behavior, treble clefs on both staves, and agreement between written-score playback events and re-parsed MusicXML. For the saved 126-note user recording, notation rest objects decreased from 125 to 17; both staves now contain substantive note material. This measures a layout change, not musical accuracy. Raw performance MIDI remained byte-for-byte unchanged. The previous score was preserved beside the regenerated score.
+
+The initial audio player played the uploaded source, not generated MIDI. This was a misleading omission in the original interface. The two new output players are generated solely from event data with no access to the uploaded audio file.
+
 Verified locally on Windows / Python 3.12 / CPU.
 
 - Five automated tests passed: chord/voice preservation and barline ties, silent and invalid audio, API input validation and cross-origin rejection, local asset references, and asynchronous failure handling.

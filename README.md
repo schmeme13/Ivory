@@ -1,5 +1,19 @@
 # Ivory
 
+## Expressive rhythm interpretation
+
+The default Expressive mode clusters different pitches struck within a bounded window (up to 90 ms), then favors sixteenth-note rhythms and fills tiny release gaps. Clustering happens across both staves; repeated attacks of the same pitch are kept separate. Simple favors eighth notes with a slightly wider chord window. Precise retains a thirty-second grid and distinct staggered attacks. These choices can simplify intentional ornaments; use Precise for those passages. Raw performance MIDI and detected-performance playback remain unchanged.
+
+Leaving tempo blank refines the beat tracker's global tempo estimate against note attacks within a small neighborhood. A supplied tempo is honored. This is still constant-tempo quantization, not full rubato tracking. Accidental spelling is selected against the key signature without changing MIDI pitch; unexpected chromatic notes are not automatically deleted or moved into the key.
+
+## Update 0.2: playback and notation repair
+
+The result now has two separately labeled, locally synthesized audio previews: **Detected performance** uses raw model notes and pedal events; **Written score** uses exactly the pitches and durations exported to MusicXML. These are simple harmonic tones, not a sampled piano. The uploaded recording remains a separately labeled reference player. Starting one pauses the others.
+
+Notation now groups notes by attack, uses a thirty-second grid, chooses clefs from each staff's range, estimates a staff boundary for high-register pieces, and spells accidentals consistently with the estimated key. A manual MIDI-note staff split is available. This is explicitly a readable reduction: note endings within chords are grouped and may be shortened to the next attack on that staff. It does not recover independent sustained voices or guarantee the original composer's notation. Pitch estimates are unchanged.
+
+Completed jobs with `details.json` are restored on restart and the latest is loaded automatically. Playback files are `performance.wav` and `score.wav`; `score-events.json` records the written-score playback. Existing sample notation was backed up as `score-before-v02.musicxml` before regeneration. Version 0.1 details below describe the original baseline.
+
 A local, research-based first iteration of audio-to-sheet-music transcription for solo piano.
 
 ## Start
