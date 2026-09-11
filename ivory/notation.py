@@ -1,56 +1,91 @@
-"""Conservative first-pass notation; never modify the acoustic performance."""
+"""Readable two-staff reduction; acoustic detections are never modified."""
 from collections import defaultdict
 from pathlib import Path
-from music21 import stream, note, chord, meter, tempo, clef, metadata, layout, key
+import json
+import statistics
+from music21 import stream, note, chord, meter, tempo, clef, metadata, layout, key, pitch
+from .playback import synthesize, score_events
 
-def make_score(events: dict, output: Path, bpm: float | None = None, signature: str = '4/4'):
-    bpm = bpm or events['estimated_bpm'] or 120.0
-    bpm = max(20.0, min(300.0, bpm))
+def staff_boundary(notes):
+    values = sorted(n['midi_note'] for n in notes)
+    if len(values) >= 10:
+        trim = len(values) // 10
+        values = values[trim:-trim]
+    if not values or min(values) < 60 <= max(values):
+        return 60
+    low, high = min(values), max(values)
+    for _ in range(12):
+        split = (low + high) / 2
+        lower, upper = [p for p in values if p < split], [p for p in values if p >= split]
+        if not lower or not upper:
+            break
+        low, high = statistics.mean(lower), statistics.mean(upper)
+    return round((low + high) / 2)
+
+def spelled(midi, signature):
+    p = pitch.Pitch()
+    p.midi = midi
+    if signature.sharps < 0 and p.accidental and p.accidental.alter > 0:
+        p = p.getEnharmonic()
+    elif signature.sharps > 0 and p.accidental and p.accidental.alter < 0:
+        p = p.getEnharmonic()
+    return p
+
+def make_score(events: dict, output: Path, bpm: float | None = None, signature: str = '4/4', split: int | None = None):
+    bpm = max(20.0, min(300.0, bpm or events['estimated_bpm'] or 120.0))
+    boundary = split if split is not None else staff_boundary(events['notes'])
     score = stream.Score()
-    score.metadata = metadata.Metadata(title='Ivory transcription', composer='Estimated notation — review before use')
+    score.metadata = metadata.Metadata(title='Ivory transcription')
     analysis = stream.Stream()
     for event in events['notes']:
         n = note.Note(event['midi_note'])
-        n.quarterLength = max(0.125, (event['offset_time'] - event['onset_time']) * bpm / 60)
+        n.quarterLength = max(.125, (event['offset_time'] - event['onset_time']) * bpm / 60)
         analysis.append(n)
     estimated_key = analysis.analyze('key') if events['notes'] else key.Key('C')
     parts = []
     for upper in (True, False):
+        selected = [n for n in events['notes'] if (n['midi_note'] >= boundary) == upper]
         part = stream.PartStaff(id='right' if upper else 'left')
-        part.partName = 'Upper staff' if upper else 'Lower staff'
-        part.insert(0, clef.TrebleClef() if upper else clef.BassClef())
+        part.partName = 'Piano' if upper else ''
+        use_treble = not selected or statistics.median(n['midi_note'] for n in selected) >= 60
+        part.insert(0, clef.TrebleClef() if use_treble else clef.BassClef())
         part.insert(0, meter.TimeSignature(signature))
         part.insert(0, key.KeySignature(estimated_key.sharps))
-        part.insert(0, tempo.MetronomeMark(number=bpm))
+        if upper:
+            part.insert(0, tempo.MetronomeMark(number=bpm))
         groups = defaultdict(list)
-        for event in events['notes']:
-            if (event['midi_note'] >= 60) != upper:
-                continue
-            start = round(event['onset_time'] * bpm / 60 * 4) / 4
-            end = max(start + 0.25, round(event['offset_time'] * bpm / 60 * 4) / 4)
-            groups[(start, end)].append(event['midi_note'])
-        voices, ends = [], []
-        for (start, end), pitches in sorted(groups.items()):
-            slot = next((i for i, value in enumerate(ends) if value <= start), len(voices))
-            if slot == len(voices):
-                voices.append(stream.Voice(id=str(slot + 1)))
-                ends.append(0)
-            element = note.Note(pitches[0]) if len(pitches) == 1 else chord.Chord(sorted(set(pitches)))
-            element.quarterLength = end - start
-            voices[slot].insert(start, element)
-            ends[slot] = end
-        if not voices:
+        for event in selected:
+            start = round(event['onset_time'] * bpm / 60 * 8) / 8
+            groups[start].append(event)
+        starts = sorted(groups)
+        for index, start in enumerate(starts):
+            group = groups[start]
+            duration = max(.125, statistics.median(n['offset_time'] * bpm / 60 - start for n in group))
+            duration = min([.125,.25,.375,.5,.75,1,1.5,2,3,4,6,8,12,16], key=lambda value: abs(value-duration))
+            if index + 1 < len(starts):
+                duration = min(duration, starts[index+1]-start)
+            pitches = [spelled(value, estimated_key) for value in sorted(set(n['midi_note'] for n in group))]
+            element = note.Note(pitches[0]) if len(pitches) == 1 else chord.Chord(pitches)
+            element.quarterLength = duration
+            part.insert(start, element)
+        if not selected:
             part.insert(0, note.Rest(quarterLength=4))
-        for voice in voices:
-            voice.makeRests(fillGaps=True, inPlace=True)
-            part.insert(0, voice)
+        part.makeRests(fillGaps=True, inPlace=True)
         part.makeNotation(inPlace=True)
         score.insert(0, part)
         parts.append(part)
     score.insert(0, layout.StaffGroup(parts, symbol='brace', barTogether=True))
     score.write('musicxml', fp=str(output / 'score.musicxml'))
-    return {'bpm': round(bpm, 1), 'key': str(estimated_key), 'meter': signature,
-            'warnings': ['Tempo is a single estimate; rubato and tempo changes are not yet modeled.',
-                         'Meter is your selected value, not automatic detection. Timing snaps to sixteenth notes.',
-                         'Staff assignment uses middle C; crossing hands and complex voices need review.',
-                         'Key and note endings are estimates. Pedal events are preserved in MIDI and event JSON, not engraved.']}
+    rendered = score_events(score,bpm)
+    synthesize(rendered,output/'score.wav')
+    if not (output/'performance.wav').exists():
+        synthesize(events,output/'performance.wav')
+    (output/'score-events.json').write_text(json.dumps(rendered),encoding='utf-8')
+    details = {'bpm':round(bpm,1), 'key':str(estimated_key), 'meter':signature, 'staff_split':boundary,
+        'warnings': ['Pitch detection has not been corrected against a reference score.',
+        'Readable reduction: simultaneous notes share a duration; each staff advances at its next attack. Independent sustained voices may be shortened.',
+        'Tempo is constant; meter is selected manually. Timing snaps to thirty-second notes.',
+        'Staff boundary and clefs are estimated; adjust the split for overlapping hand ranges.',
+        'Detected-performance playback includes pedal estimates. Written-score playback follows MusicXML without pedal. Both use synthesized tones.']}
+    (output/'details.json').write_text(json.dumps(details),encoding='utf-8')
+    return details

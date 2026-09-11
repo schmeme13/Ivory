@@ -35,6 +35,7 @@ lock = Lock()
 class ScoreOptions(BaseModel):
     bpm: float | None = Field(default=None, ge=20, le=300)
     meter: Literal['4/4', '3/4', '2/4', '6/8'] = '4/4'
+    split: int | None = Field(default=None, ge=21, le=108)
 
 def get_job(job_id):
     with lock:
@@ -55,7 +56,7 @@ def process(job_id, options):
         if not events['notes']:
             raise ValueError('No piano notes were detected. Try a clearer solo-piano recording.')
         update(job_id, status='engraving', message='Preparing the score…')
-        details = make_score(events, folder, options.bpm, options.meter)
+        details = make_score(events, folder, options.bpm, options.meter, options.split)
         update(job_id, status='done', message='Your first-pass score is ready.', details=details, note_count=len(events['notes']), pedal_count=len(events['pedals']), duration=events['duration'])
     except Exception as exc:
         logging.exception('Transcription failed')
@@ -64,12 +65,17 @@ def process(job_id, options):
 @app.get('/api/health')
 def health():
     model = ROOT / 'data/models/piano.pth'
-    return {'model_ready': model.exists() and model.stat().st_size >= 160_000_000, 'version': '0.1.0'}
+    return {'model_ready': model.exists() and model.stat().st_size >= 160_000_000, 'version': '0.2.0'}
+
+@app.get('/api/latest')
+def latest():
+    completed = [j for j in jobs.values() if j['status'] == 'done']
+    return completed[-1] if completed else None
 
 @app.post('/api/jobs', status_code=202)
-async def upload(file: UploadFile = File(...), bpm: float | None = Form(None), signature: str = Form('4/4')):
+async def upload(file: UploadFile = File(...), bpm: float | None = Form(None), signature: str = Form('4/4'), split: int | None = Form(None)):
     try:
-        options = ScoreOptions(bpm=bpm, meter=signature)
+        options = ScoreOptions(bpm=bpm, meter=signature, split=split)
     except ValueError:
         raise HTTPException(422, 'Use tempo 20–300 and a supported meter.')
     with lock:
@@ -109,7 +115,7 @@ def rescore(job_id: str, options: ScoreOptions):
         raise HTTPException(409, 'Wait for transcription to finish.')
     folder = DATA / job_id
     with lock:
-        details = make_score(json.loads((folder / 'events.json').read_text()), folder, options.bpm, options.meter)
+        details = make_score(json.loads((folder / 'events.json').read_text()), folder, options.bpm, options.meter, options.split)
         jobs[job_id]['details'] = details
     return get_job(job_id)
 
@@ -117,8 +123,20 @@ def rescore(job_id: str, options: ScoreOptions):
 def download(job_id: str, name: str):
     if get_job(job_id)['status'] != 'done':
         raise HTTPException(409, 'Wait for transcription to finish.')
-    if name not in ('performance.mid', 'score.musicxml', 'events.json'):
+    if name not in ('performance.mid', 'score.musicxml', 'events.json', 'performance.wav', 'score.wav', 'score-events.json'):
         raise HTTPException(404)
+    if not (DATA / job_id / name).is_file():
+        raise HTTPException(404, 'Rebuild the notation to create playback files.')
     return FileResponse(DATA / job_id / name, filename=name)
+
+for details_file in sorted(DATA.glob('*/details.json'), key=lambda p: p.stat().st_mtime):
+    try:
+        folder = details_file.parent
+        events = json.loads((folder / 'events.json').read_text())
+        jobs[folder.name] = {'id':folder.name, 'status':'done', 'message':'Saved transcription restored.',
+            'details':json.loads(details_file.read_text()), 'note_count':len(events['notes']),
+            'pedal_count':len(events['pedals']), 'duration':events['duration']}
+    except (OSError, ValueError, KeyError):
+        logging.warning('Skipping incomplete saved job: %s', details_file.parent.name)
 
 app.mount('/', StaticFiles(directory=ROOT / 'dist', html=True), name='web')
