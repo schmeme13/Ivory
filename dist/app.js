@@ -10,6 +10,7 @@ async function show(job){
   el('bpm').value=job.details.bpm;el('meter').value=job.details.meter;el('feel').value=job.details.feel||'expressive';el('split').placeholder=`Auto (${job.details.staff_split??60})`;
   for(const [id,file] of [['detected-player','performance.wav'],['score-player','score.wav']])el(id).src=`/api/jobs/${job.id}/files/${file}?v=${Date.now()}`;
   el('empty').hidden=true;el('results').hidden=false;el('downloads').hidden=false;
+  let workshop=el('workshop-link');if(!workshop){workshop=document.createElement('a');workshop.id='workshop-link';workshop.className='workshop-link';workshop.textContent='Open workshop';el('downloads').before(workshop);}workshop.href=`/workshop.html?job=${encodeURIComponent(job.id)}`;
   el('summary').textContent=`${job.details.bpm} BPM · ${job.details.meter}`;
   for(const [id,file] of [['xml','score.musicxml'],['midi','performance.mid'],['events','events.json']]){el(id).href=`/api/jobs/${job.id}/files/${file}`;el(id).download=file;}
   el('warnings').replaceChildren(...job.details.warnings.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
@@ -55,7 +56,7 @@ for(const [id,button,label] of [['score-player','play','written score'],['player
   el(id).addEventListener('play',()=>{for(const other of ['player','detected-player','score-player'])if(other!==id)el(other).pause();update();});for(const event of ['pause','ended'])el(id).addEventListener(event,update);
   el(id).addEventListener('error',()=>{el('status').textContent='Audio unavailable. Update sheet music to regenerate playback.';});
 }
-el('print').addEventListener('click',()=>{el('downloads').open=false;window.print();});
+el('print').addEventListener('click',()=>{el('downloads').open=false;window.open(`/print.html?job=${encodeURIComponent(jobId)}`,'_blank','noopener');});
 document.addEventListener('click',event=>{for(const menu of document.querySelectorAll('.menu[open]'))if(!menu.contains(event.target))menu.open=false;});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')for(const menu of document.querySelectorAll('.menu[open]'))menu.open=false;});
 (async()=>{try{const health=await request('/api/health');modelReady=health.model_ready;setBusy(false);el('status').textContent=modelReady?'':'Run setup.ps1 to install the model.';const job=await request('/api/latest');if(job)await show(job);}catch(error){el('status').textContent=error.message;}})();

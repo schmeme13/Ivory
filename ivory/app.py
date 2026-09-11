@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from .transcription import transcribe
 from .notation import make_score
+from .workshop import EditDocument, read_document, save_document
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'data/jobs'
@@ -129,6 +130,28 @@ def download(job_id: str, name: str):
     if not (DATA / job_id / name).is_file():
         raise HTTPException(404, 'Rebuild the notation to create playback files.')
     return FileResponse(DATA / job_id / name, filename=name)
+
+@app.get('/api/jobs/{job_id}/workshop')
+def workshop_read(job_id: str):
+    if get_job(job_id)['status']!='done':raise HTTPException(409,'Finish transcription first.')
+    with lock:return read_document(DATA/job_id)
+
+@app.put('/api/jobs/{job_id}/workshop')
+def workshop_save(job_id: str, document: EditDocument):
+    if get_job(job_id)['status']!='done':raise HTTPException(409,'Finish transcription first.')
+    with lock:
+        try:return save_document(DATA/job_id,document)
+        except ValueError as exc:raise HTTPException(409,str(exc))
+
+@app.get('/api/jobs/{job_id}/workshop/files/{name}')
+def workshop_file(job_id: str,name: str):
+    get_job(job_id)
+    if name not in ('score.musicxml','score.wav','score-events.json'):raise HTTPException(404)
+    with lock:
+        document=read_document(DATA/job_id)
+        folder=DATA/job_id
+        if not document['revision'].startswith('base-'):folder=folder/'workshop'/document['revision']
+    return FileResponse(folder/name,filename=name)
 
 for details_file in sorted(DATA.glob('*/details.json'), key=lambda p: p.stat().st_mtime):
     try:
