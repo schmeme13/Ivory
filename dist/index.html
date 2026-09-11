@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ivory — Piano transcription</title><meta name="description" content="Turn a solo piano recording into editable sheet music."><link rel="stylesheet" href="/style.css"><script defer src="/vendor/opensheetmusicdisplay.min.js"></script><script defer src="/app.js"></script></head>
+<body><header><a class="brand" href="/">Ivory<span>PIANO TRANSCRIPTION</span></a><span class="badge">Local studio · First iteration</span></header>
+<main><aside><h1>From sound<br>to score.</h1><p>Start with a solo piano recording. Review the notation, then take it to your music editor.</p>
+<form id="upload"><label class="drop" for="audio">Choose your recording<input id="audio" name="file" type="file" accept=".wav,.flac,.mp3,.ogg" required><span>WAV, FLAC, MP3 or OGG<br>Up to 2 minutes · 40 MB</span></label>
+<audio id="player" controls hidden></audio>
+<div class="options"><label>Tempo (BPM)<input id="bpm" type="number" min="20" max="300" placeholder="Estimate automatically"></label><label>Meter<select id="meter"><option>4/4</option><option>3/4</option><option>2/4</option><option>6/8</option></select></label></div>
+<p class="hint">Meter defaults to 4/4. For 6/8, tempo is measured in quarter notes.</p><button id="submit" type="submit" disabled>Loading model status…</button></form>
+<p id="status" role="status" aria-live="polite">Connecting to your local studio…</p>
+<div class="privacy">Your audio stays on this computer. Files are retained in Ivory’s data folder.</div>
+</aside><section class="workspace" aria-label="Score workspace"><div class="scorebar"><div><span class="eyebrow">SHEET MUSIC</span><h2 id="score-title">Your transcription</h2></div><button id="print" class="secondary" hidden>Print / Save PDF</button></div>
+<div id="empty"><span class="music" aria-hidden="true">𝄞</span><h3>A place for your next piece.</h3><p>Upload a recording to create a first-pass score.<br>Chords and sustain pedal are analyzed together.</p></div>
+<div id="results" hidden><p id="summary"></p><div class="actions"><a id="xml">MusicXML</a><a id="midi">Performance MIDI</a><a id="events">Note & pedal data</a><button id="rescore" class="secondary">Apply tempo & meter</button></div><details><summary>What to review in this score</summary><ul id="warnings"></ul></details><div id="sheet"></div></div>
+</section></main><footer>Ivory 0.1 · Built on Kong et al.’s high-resolution piano transcription research. Accuracy on your recordings has not yet been benchmarked.</footer></body></html>
